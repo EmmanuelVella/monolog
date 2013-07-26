@@ -25,32 +25,23 @@ class PushoverHandler extends SocketHandler
     private $user;
     private $title;
 
-    private $highPriorityLevel;
-    private $emergencyLevel;
-
     /**
      * @param string  $token  Pushover api token
-     * @param string  $user   Pushover user id the message will be sent to
-     * @param string  $title  Title sent to the Pushover API
+     * @param string  $users  Pushover user ids the message will be sent to
+     * @param string  $title  Title sent to Pushover API
      * @param integer $level  The minimum logging level at which this handler will be triggered
      * @param Boolean $bubble Whether the messages that are handled can bubble up the stack or not
      * @param Boolean $useSSL Whether to connect via SSL. Required when pushing messages to users that are not
      *                        the pushover.net app owner. OpenSSL is required for this option.
-     * @param integer $highPriorityLevel The minimum logging level at which this handler will start
-     *                                   sending "high priority" requests to the Pushover API
-     * @param integer $emergencyLevel The minimum logging level at which this handler will start
-     *                                sending "emergency" requests to the Pushover API
      */
-    public function __construct($token, $user, $title = null, $level = Logger::CRITICAL, $bubble = true, $useSSL = true, $highPriorityLevel = Logger::CRITICAL, $emergencyLevel = Logger::EMERGENCY)
+    public function __construct($token, $users, $title = null, $level = Logger::CRITICAL, $bubble = true, $useSSL = true)
     {
         $connectionString = $useSSL ? 'ssl://api.pushover.net:443' : 'api.pushover.net:80';
         parent::__construct($connectionString, $level, $bubble);
 
         $this->token = $token;
-        $this->user = $user;
+        $this->users = (array) $users;
         $this->title = $title ?: gethostname();
-        $this->highPriorityLevel = $highPriorityLevel;
-        $this->emergencyLevel = $emergencyLevel;
     }
 
     protected function generateDataStream($record)
@@ -69,17 +60,11 @@ class PushoverHandler extends SocketHandler
 
         $dataArray = array(
             'token' => $this->token,
-            'user' => $this->user,
+            'user' => $record['extra']['user'],
             'message' => $message,
             'title' => $this->title,
             'timestamp' => $timestamp
         );
-
-        if ($record['level'] >= $this->emergencyLevel) {
-            $dataArray['priority'] = 2;
-        } elseif ($record['level'] >= $this->highPriorityLevel) {
-            $dataArray['priority'] = 1;
-        }
 
         return http_build_query($dataArray);
     }
@@ -97,15 +82,11 @@ class PushoverHandler extends SocketHandler
 
     public function write(array $record)
     {
-        parent::write($record);
-        $this->closeSocket();
-    }
+        foreach ($this->users as $user) {
+            $record['extra']['user'] = $user;
 
-    public function setHighPriorityLevel($value) {
-        $this->highPriorityLevel = $value;
-    }
-
-    public function setEmergencyLevel($value) {
-        $this->emergencyLevel = $value;
+            parent::write($record);
+            $this->closeSocket();
+        }
     }
 }
